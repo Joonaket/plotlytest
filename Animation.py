@@ -1,21 +1,21 @@
-# Animation.py
-
 import numpy as np
-from matplotlib.animation import FuncAnimation
-from datetime import timedelta
+import plotly.graph_objs as go
+from dash import Output, Input, dash, html, dcc
+
 
 class Animator:
     def __init__(self, analyzer):
         self.analyzer = analyzer
-        self.ani = None
 
-    def animate(self, frame):
+    def update_plot(self, n):
         if self.analyzer.data_queue.empty():
-            return self.analyzer.adc1_line, self.analyzer.adc2_line, self.analyzer.adc1_peaks, self.analyzer.adc2_peaks
+            return dash.no_update
 
+        # Retrieve data from queue
         data = self.analyzer.data_queue.get()
+        self.analyzer.processed_duration += self.analyzer.display_time
 
-        # Update buffers with new data
+        # Update buffers for ADC1 and ADC2
         self.analyzer.adc1_buffer.extend(data['adc1'][-self.analyzer.display_points:])
         self.analyzer.adc2_buffer.extend(data['adc2'][-self.analyzer.display_points:])
 
@@ -23,58 +23,51 @@ class Animator:
         self.analyzer.adc1_peak_count += len(data['adc1_peaks'])
         self.analyzer.adc2_peak_count += len(data['adc2_peaks'])
 
-        # Calculate time values for the entire display buffer
-        self.analyzer.current_time = self.analyzer.processed_duration
-        start_time = self.analyzer.current_time - self.analyzer.display_time
-        time_values = np.linspace(start_time, self.analyzer.current_time, len(self.analyzer.adc1_buffer))
+        # Calculate time values for scrolling effect
+        start_time = max(0, self.analyzer.processed_duration - self.analyzer.display_time)
+        time_values = np.linspace(start_time, self.analyzer.processed_duration, len(self.analyzer.adc1_buffer))
 
-        # Update peaks and their corresponding times
-        self.update_peaks(data, time_values)
+        # Prepare data for updating the figure
+        traces = [
+            # ADC1 Signal
+            go.Scatter(x=time_values, y=list(self.analyzer.adc1_buffer), mode='lines', name='ADC1 Signal',
+                       line=dict(color='blue')),
+            # ADC1 Peaks
+            go.Scatter(x=[time_values[peak] for peak in data['adc1_peaks']],
+                       y=[self.analyzer.adc1_buffer[peak] for peak in data['adc1_peaks']], mode='markers',
+                       name='ADC1 Peaks', marker=dict(color='red', size=10, symbol='x')),
 
-        # Update statistics label
-        self.update_statistics()
+            # ADC2 Signal
+            go.Scatter(x=time_values, y=list(self.analyzer.adc2_buffer), mode='lines', name='ADC2 Signal',
+                       line=dict(color='green')),
+            # ADC2 Peaks
+            go.Scatter(x=[time_values[peak] for peak in data['adc2_peaks']],
+                       y=[self.analyzer.adc2_buffer[peak] for peak in data['adc2_peaks']], mode='markers',
+                       name='ADC2 Peaks', marker=dict(color='red', size=10, symbol='x'))
+        ]
 
-        # Update line plots for ADC1 and ADC2
-        self.analyzer.adc1_line.set_data(time_values, list(self.analyzer.adc1_buffer))
-        self.analyzer.adc2_line.set_data(time_values, list(self.analyzer.adc2_buffer))
-
-        # Update peak markers
-        self.analyzer.adc1_peaks.set_data(list(self.analyzer.adc1_peak_times), list(self.analyzer.adc1_peak_values))
-        self.analyzer.adc2_peaks.set_data(list(self.analyzer.adc2_peak_times), list(self.analyzer.adc2_peak_values))
-
-        # Adjust plot limits for the sliding window
-        for ax in [self.analyzer.ax1, self.analyzer.ax2]:
-            ax.set_xlim(max(0, start_time), self.analyzer.current_time)
-
-        return self.analyzer.adc1_line, self.analyzer.adc2_line, self.analyzer.adc1_peaks, self.analyzer.adc2_peaks
-
-    def update_peaks(self, data, time_values):
-        # Append new peaks to the peak buffers and calculate their correct time values
-        buffer_start_index = len(self.analyzer.adc1_buffer) - len(data['adc1'])
-
-        for peak in data['adc1_peaks']:
-            peak_time = time_values[buffer_start_index + peak]
-            self.analyzer.adc1_peak_times.append(peak_time)
-            self.analyzer.adc1_peak_values.append(self.analyzer.adc1_buffer[buffer_start_index + peak])
-
-        buffer_start_index = len(self.analyzer.adc2_buffer) - len(data['adc2'])
-
-        for peak in data['adc2_peaks']:
-            peak_time = time_values[buffer_start_index + peak]
-            self.analyzer.adc2_peak_times.append(peak_time)
-            self.analyzer.adc2_peak_values.append(self.analyzer.adc2_buffer[buffer_start_index + peak])
-
-    def update_statistics(self):
-        stats_text = f"Processed: {timedelta(seconds=int(self.analyzer.processed_duration))} | "
-        stats_text += f"ADC1 Peaks: {self.analyzer.adc1_peak_count} | ADC2 Peaks: {self.analyzer.adc2_peak_count}"
-        self.analyzer.stats_label.config(text=stats_text)
+        # Update figure layout and data
+        self.analyzer.fig.update_traces(overwrite=True)
+        self.analyzer.fig.update_xaxes(range=[start_time, self.analyzer.processed_duration])
+        return traces
 
     def start_animation(self):
-        if self.ani is None:
-            self.ani = FuncAnimation(
-                self.analyzer.fig,
-                self.animate,
-                interval=self.analyzer.animation_speed,
-                blit=True,
-                cache_frame_data=False
-            )
+        app = dash.Dash(__name__)
+
+        # Layout
+        app.layout = html.Div([
+            html.H1("Real-Time Dual ADC Signal Analyzer"),
+            dcc.Graph(id="live-graph", figure=self.analyzer.fig),
+            dcc.Interval(id="interval-component", interval=1000)  # Update interval in ms
+        ])
+
+        # Callback to update the figure at each interval
+        @app.callback(
+            Output("live-graph", "figure"),
+            Input("interval-component", "n_intervals")
+        )
+        def update_graph_live(n_intervals):
+            return go.Figure(data=self.update_plot(n_intervals))
+
+        # Run the Dash app
+        app.run_server(debug=True)

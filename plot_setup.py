@@ -1,39 +1,31 @@
-import matplotlib
-matplotlib.use('TkAgg')
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import tkinter as tk
-
-def setup_plot(self):
-    self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(12, 8))
-
-    # ADC1 plot
-    self.adc1_line, = self.ax1.plot([], [], 'b-', label='ADC1 Signal')
-    self.adc1_peaks, = self.ax1.plot([], [], 'rx', label='ADC1 Peaks',
-                                     markersize=10, markeredgewidth=2)
-    self.ax1.set_title('ADC1 Signal')
-    self.ax1.set_ylim(390, 1520)
-    self.ax1.legend()
+import plotly.graph_objs as go
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import numpy as np
+import pandas as pd
+from collections import deque
+import time
 
 
+def setup_plot(analyzer):
+    # Plot setup using Plotly
+    fig = go.Figure()
 
-    # ADC2 plot
-    self.adc2_line, = self.ax2.plot([], [], 'g-', label='ADC2 Signal')
-    self.adc2_peaks, = self.ax2.plot([], [], 'rx', label='ADC2 Peaks',
-                                     markersize=10, markeredgewidth=2)
-    self.ax2.set_title('ADC2 Signal')
-    self.ax2.set_ylim(390,1520)
-    self.ax2.legend()
+    # ADC1 and ADC2 traces
+    fig.add_trace(go.Scatter(x=[], y=[], mode='lines', name='ADC1 Signal', line=dict(color='blue')))
+    fig.add_trace(
+        go.Scatter(x=[], y=[], mode='markers', name='ADC1 Peaks', marker=dict(color='red', size=10, symbol='x')))
 
-    for ax in [self.ax1, self.ax2]:
-        ax.grid(True)
-        ax.set_xlabel('Time (s)')
-        ax.set_ylabel('ADC Value')
+    fig.add_trace(go.Scatter(x=[], y=[], mode='lines', name='ADC2 Signal', line=dict(color='green')))
+    fig.add_trace(
+        go.Scatter(x=[], y=[], mode='markers', name='ADC2 Peaks', marker=dict(color='red', size=10, symbol='x')))
 
+    fig.update_layout(
+        title="Dual ADC Signal Analyzer",
+        xaxis=dict(title="Time (s)", range=[0, analyzer.display_time]),
+        yaxis=dict(title="ADC Value", range=[390, 1520]),
+        height=800
+    )
 
-    self.fig.tight_layout() #Clipping legend was annoying me
-
-    self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
-    self.canvas.draw()
-    self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-    self.fig.canvas.mpl_connect('scroll_event', self.zoom)
+    analyzer.fig = fig
