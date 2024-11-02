@@ -2,10 +2,14 @@ import numpy as np
 import logging
 import plotly.graph_objs as go
 
-def process_chunk(chunk_data, threshold):
+def process_chunk(chunk_data, threshold, downsample=False):
     try:
         adc1_signal = chunk_data['adc1'].values
         adc2_signal = chunk_data['adc2'].values
+        if downsample:
+            # Downsample the data
+            adc1_signal = adc1_signal[::100]
+            adc2_signal = adc2_signal[::100]
 
         adc1_peaks = detect_significant_peaks(adc1_signal, threshold)
         adc2_peaks = detect_significant_peaks(adc2_signal, threshold)

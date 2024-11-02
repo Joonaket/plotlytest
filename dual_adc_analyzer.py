@@ -81,11 +81,11 @@ class DualADCSignalAnalyzer:
             logging.error(f"Error loading file: {e}")
             return str(e)
 
-    def process_chunk(self, chunk_data, threshold):
+    def process_chunk(self, chunk_data, threshold, downsample):
         """Process a chunk of data with a given threshold."""
         try:
             # Call the standalone function if needed, or implement your logic
-            return process_chunk(chunk_data, threshold)  # Importing this from data_processing
+            return process_chunk(chunk_data, threshold, downsample)  # Importing this from data_processing
         except Exception as e:
             logging.error(f"Error processing chunk: {e}")
             return None
